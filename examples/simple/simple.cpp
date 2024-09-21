@@ -15,10 +15,16 @@ static void print_usage(int argc, char ** argv, const gpt_params & params) {
 }
 
 int main(int argc, char ** argv) {
+
+
+
     gpt_params params;
 
     params.prompt = "Hello my name is";
     params.n_predict = 32;
+
+    params.model = "/home/hbx/models/llama-2-7b.Q4_0.gguf";
+
 
     if (!gpt_params_parse(argc, argv, params)) {
         print_usage(argc, argv, params);
