@@ -5,6 +5,7 @@
 #include "unicode.h"
 #include "unicode-data.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,12 @@
 #include <vector>
 #include <locale>
 #include <codecvt>
+
+size_t unicode_len_utf8(char src) {
+    const size_t lookup[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4 };
+    uint8_t highbits = static_cast<uint8_t>(src) >> 4;
+    return lookup[highbits];
+}
 
 static std::string unicode_cpts_to_utf8(const std::vector<uint32_t> & cps) {
     std::string result;

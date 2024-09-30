@@ -16,7 +16,7 @@ In order to build llama.cpp you have four different options.
       make
       ```
 
-  - On Windows:
+  - On Windows (x86/x64 only, arm64 requires cmake):
 
     1. Download the latest fortran version of [w64devkit](https://github.com/skeeto/w64devkit/releases).
     2. Extract `w64devkit` on your pc.
@@ -60,6 +60,17 @@ In order to build llama.cpp you have four different options.
       cmake -B build -G "Xcode"
       cmake --build build --config Debug
       ```
+    - Building for Windows (x86, x64 and arm64) with MSVC or clang as compilers:
+      - Install Visual Studio 2022, e.g. via the [Community Edition](https://visualstudio.microsoft.com/de/vs/community/). In the installer, select at least the following options (this also automatically installs the required additional tools like CMake,...):
+        - Tab Workload: Desktop-development with C++
+        - Tab Components (select quickly via search): C++-_CMake_ Tools for Windows, _Git_ for Windows, C++-_Clang_ Compiler for Windows, MS-Build Support for LLVM-Toolset (clang)
+      - Please remember to always use a Developer Command Prompt / PowerShell for VS2022 for git, build, test
+      - For Windows on ARM (arm64, WoA) build with:
+        ```bash
+        cmake --preset arm64-windows-llvm-release -D GGML_OPENMP=OFF
+        cmake --build build-arm64-windows-llvm-release
+        ```
+        Note: Building for arm64 could also be done just with MSVC (with the build-arm64-windows-MSVC preset, or the standard CMake build instructions). But MSVC does not support inline ARM assembly-code, used e.g. for the accelerated Q4_0_4_8 CPU kernels.
 
 -   Using `gmake` (FreeBSD):
 
@@ -167,7 +178,11 @@ For Jetson user, if you have Jetson Orin, you can try this: [Offical Support](ht
   cmake --build build --config Release
   ```
 
-The environment variable [`CUDA_VISIBLE_DEVICES`](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars) can be used to specify which GPU(s) will be used. The following compilation options are also available to tweak performance:
+The environment variable [`CUDA_VISIBLE_DEVICES`](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars) can be used to specify which GPU(s) will be used.
+
+The environment variable `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` can be used to enable unified memory in Linux. This allows swapping to system RAM instead of crashing when the GPU VRAM is exhausted. In Windows this setting is available in the NVIDIA control panel as `System Memory Fallback`.
+
+The following compilation options are also available to tweak performance:
 
 | Option                        | Legal values           | Default | Description                                                                                                                                                                                                                                                                             |
 |-------------------------------|------------------------|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -180,6 +195,19 @@ The environment variable [`CUDA_VISIBLE_DEVICES`](https://docs.nvidia.com/cuda/c
 | GGML_CUDA_KQUANTS_ITER        | 1 or 2                 | 2       | Number of values processed per iteration and per CUDA thread for Q2_K and Q6_K quantization formats. Setting this value to 1 can improve performance for slow GPUs.                                                                                                                     |
 | GGML_CUDA_PEER_MAX_BATCH_SIZE | Positive integer       | 128     | Maximum batch size for which to enable peer access between multiple GPUs. Peer access requires either Linux or NVLink. When using NVLink enabling peer access for larger batch sizes is potentially beneficial.                                                                         |
 | GGML_CUDA_FA_ALL_QUANTS       | Boolean                | false   | Compile support for all KV cache quantization type (combinations) for the FlashAttention CUDA kernels. More fine-grained control over KV cache size but compilation takes much longer.                                                                                                  |
+
+### MUSA
+
+- Using `make`:
+  ```bash
+  make GGML_MUSA=1
+  ```
+- Using `CMake`:
+
+  ```bash
+  cmake -B build -DGGML_MUSA=ON
+  cmake --build build --config Release
+  ```
 
 ### hipBLAS
 
@@ -324,6 +352,37 @@ cmake --build build --config Release
 # ggml_vulkan: Using Intel(R) Graphics (ADL GT2) | uma: 1 | fp16: 1 | warp size: 32
 ```
 
+### CANN
+This provides NPU acceleration using the AI cores of your Ascend NPU. And [CANN](https://www.hiascend.com/en/software/cann) is a hierarchical APIs to help you to quickly build AI applications and service based on Ascend NPU.
+
+For more information about Ascend NPU in [Ascend Community](https://www.hiascend.com/en/).
+
+Make sure to have the CANN toolkit installed. You can download it from here: [CANN Toolkit](https://www.hiascend.com/developer/download/community/result?module=cann)
+
+Go to `llama.cpp` directory and build using CMake.
+```bash
+cmake -B build -DGGML_CANN=on -DCMAKE_BUILD_TYPE=release
+cmake --build build --config release
+```
+
+You can test with:
+
+`./build/llama-cli -m PATH_TO_MODEL -p "Building a website can be done in 10 steps:" -ngl 32`
+
+If the fllowing info is output on screen, you are using `llama.cpp by CANN backend`:
+```bash
+llm_load_tensors:       CANN buffer size = 13313.00 MiB
+llama_new_context_with_model:       CANN compute buffer size =  1260.81 MiB
+```
+
+For detailed info, such as model/device supports, CANN install, please refer to [llama.cpp for CANN](./backend/CANN.md).
+
 ### Android
 
 To read documentation for how to build on Android, [click here](./android.md)
+
+### Arm CPU optimized mulmat kernels
+
+Llama.cpp includes a set of optimized mulmat kernels for the Arm architecture, leveraging Arm® Neon™, int8mm and SVE instructions. These kernels are enabled at build time through the appropriate compiler cpu-type flags, such as `-DCMAKE_C_FLAGS=-march=armv8.2a+i8mm+sve`. Note that these optimized kernels require the model to be quantized into one of the formats: `Q4_0_4_4` (Arm Neon), `Q4_0_4_8` (int8mm) or `Q4_0_8_8` (SVE). The SVE mulmat kernel specifically requires a vector width of 256 bits. When running on devices with a different vector width, it is recommended to use the `Q4_0_4_8` (int8mm) or `Q4_0_4_4` (Arm Neon) formats for better performance. Refer to [examples/quantize/README.md](../examples/quantize/README.md) for more information on the quantization formats.
+
+To support `Q4_0_4_4`, you must build with `GGML_NO_LLAMAFILE=1` (`make`) or `-DGGML_LLAMAFILE=OFF` (`cmake`).
