@@ -18,7 +18,7 @@ def test_completion(prompt):
     return result
 
 def eval_subject():
-    prompt_str = 'hello'
+    prompt_str = 'hello, how are you today?'
     result = test_completion(prompt_str)
     
 def main():
